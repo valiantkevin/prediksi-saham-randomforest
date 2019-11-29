@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang=''>
+  <head>
+     <meta charset='utf-8'>
+     <meta http-equiv="X-UA-Compatible" content="IE=edge">
+     <meta name="viewport" content="width=device-width, initial-scale=1">
+     <link rel="stylesheet" type="text/css" href="https://code.highcharts.com/css/stocktools/gui.css">
+     <link rel="stylesheet" type="text/css" href="https://code.highcharts.com/css/annotations/popup.css">
+     <script src="http://code.jquery.com/jquery-latest.min.js" type="text/javascript"></script>
+     <script src="https://code.highcharts.com/stock/highstock.js"></script>
+     <script src="https://code.highcharts.com/stock/modules/data.js"></script>
+
+     <script src="https://code.highcharts.com/stock/indicators/indicators-all.js"></script>
+     <script src="https://code.highcharts.com/stock/modules/drag-panes.js"></script>
+
+     <script src="https://code.highcharts.com/modules/annotations-advanced.js"></script>
+     <script src="https://code.highcharts.com/modules/price-indicator.js"></script>
+     <script src="https://code.highcharts.com/modules/full-screen.js"></script>
+
+     <script src="https://code.highcharts.com/modules/stock-tools.js"></script>
+     <title>Chart</title>
+  </head>
+  <body>
+    <div id='cssmenu'>
+      <ul>
+        <li><a href='http://localhost:8000/prediksi/'>Home</a></li>
+        <li><a href='http://localhost:8000/prediksi/update'>Update</a></li>
+        <li><a href='http://localhost:8000/prediksi/data'>Data</a></li>
+        <li class='active'><a href='http://localhost:8000/prediksi/chart'>Chart</a></li>
+        <li><a href='http://localhost:8000/prediksi/tree'>Tree</a></li>
+        <li><a href='http://localhost:8000/prediksi/result'>Result</a></li>
+        <li><a href='http://localhost:8000/prediksi/summary/'>Summary</a></li>
+      </ul>
+    </div>
+    <select id="selectBox" onchange="changeFunc();">
+    {% for x in idx %}
+      {%if ticker == x %}
+        <option selected="selected" value={{x}}>{{x}}</option>
+      {% else %}
+        <option value={{x}}>{{x}}</option>
+      {% endif %}
+    {% endfor %}
+    </select>
+    <div id="container" class="chart"></div>
+  </body>
+<html>
+
+<script type="text/javascript">
+  function changeFunc() {
+  var selectBox = document.getElementById("selectBox");
+  var selectedValue = selectBox.options[selectBox.selectedIndex].value;
+  window.location = "http://localhost:8000/prediksi/"+selectedValue+"/chart";
+  }
+  $(document).ready( function () {
+      $('#table_id').DataTable();
+  });
+</script>
+
+<style media="screen">
+  #container {
+	max-height: 800px;
+	height: 75vh;
+  }
+
+/* Conflict with Bootstrap, not needed after v7.0.1 */
+  .highcharts-bindings-wrapper * {
+	box-sizing: content-box;
+  }
+  @import url(http://fonts.googleapis.com/css?family=Raleway);
+  #cssmenu,
+  #cssmenu ul,
+  #cssmenu ul li,
+  #cssmenu ul li a {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    list-style: none;
+    line-height: 1;
+    display: block;
+    position: relative;
+    -webkit-box-sizing: border-box;
+    -moz-box-sizing: border-box;
+    box-sizing: border-box;
+  }
+  #cssmenu:after,
+  #cssmenu > ul:after {
+    content: ".";
+    display: block;
+    clear: both;
+    visibility: hidden;
+    line-height: 0;
+    height: 0;
+  }
+  #cssmenu {
+    width: auto;
+    border-bottom: 3px solid #AAAAAA;
+    font-family: Raleway, sans-serif;
+    line-height: 1;
+  }
+  #cssmenu ul {
+    background: #ffffff;
+  }
+  #cssmenu > ul > li {
+    float: left;
+  }
+  #cssmenu.align-center > ul {
+    font-size: 0;
+    text-align: center;
+  }
+  #cssmenu.align-center > ul > li {
+    display: inline-block;
+    float: none;
+  }
+  #cssmenu.align-right > ul > li {
+    float: right;
+  }
+  #cssmenu.align-right > ul > li > a {
+    margin-right: 0;
+    margin-left: -4px;
+  }
+  #cssmenu > ul > li > a {
+    z-index: 2;
+    padding: 18px 25px 12px 25px;
+    font-size: 15px;
+    font-weight: 400;
+    text-decoration: none;
+    color: #444444;
+    -webkit-transition: all .2s ease;
+    -moz-transition: all .2s ease;
+    -ms-transition: all .2s ease;
+    -o-transition: all .2s ease;
+    transition: all .2s ease;
+    margin-right: -4px;
+  }
+  #cssmenu > ul > li.active > a,
+  #cssmenu > ul > li:hover > a,
+  #cssmenu > ul > li > a:hover {
+    color: #ffffff;
+  }
+  #cssmenu > ul > li > a:after {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    z-index: -1;
+    width: 100%;
+    height: 120%;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    content: "";
+    -webkit-transition: all .2s ease;
+    -o-transition: all .2s ease;
+    transition: all .2s ease;
+    -webkit-transform: perspective(5px) rotateX(2deg);
+    -webkit-transform-origin: bottom;
+    -moz-transform: perspective(5px) rotateX(2deg);
+    -moz-transform-origin: bottom;
+    transform: perspective(5px) rotateX(2deg);
+    transform-origin: bottom;
+  }
+  #cssmenu > ul > li.active > a:after,
+  #cssmenu > ul > li:hover > a:after,
+  #cssmenu > ul > li > a:hover:after {
+    background: #AAAAAA;
+  }
+</style>
+
+<script type="text/javascript">
+  Highcharts.getJSON('http://localhost:8000/prediksi/{{ticker}}/coba/', function (data) {
+
+    // split the data set into ohlc and volume
+    var ohlc = [],
+        volume = [],
+        dataLength = data.length,
+        i = 0;
+
+    for (i; i < dataLength; i += 1) {
+        ohlc.push([
+            data[i][0], // the date
+            data[i][1], // open
+            data[i][2], // high
+            data[i][3], // low
+            data[i][4] // close
+        ]);
+
+        volume.push([
+            data[i][0], // the date
+            data[i][5] // the volume
+        ]);
+    }
+
+    Highcharts.stockChart('container', {
+        yAxis: [{
+            labels: {
+                align: 'left'
+            },
+            height: '80%',
+            resize: {
+                enabled: true
+            }
+        }, {
+            labels: {
+                align: 'left'
+            },
+            top: '80%',
+            height: '20%',
+            offset: 0
+        }],
+        tooltip: {
+            shape: 'square',
+            headerShape: 'callout',
+            borderWidth: 0,
+            shadow: false,
+            positioner: function (width, height, point) {
+                var chart = this.chart,
+                    position;
+
+                if (point.isHeader) {
+                    position = {
+                        x: Math.max(
+                            // Left side limit
+                            chart.plotLeft,
+                            Math.min(
+                                point.plotX + chart.plotLeft - width / 2,
+                                // Right side limit
+                                chart.chartWidth - width - chart.marginRight
+                            )
+                        ),
+                        y: point.plotY
+                    };
+                } else {
+                    position = {
+                        x: point.series.chart.plotLeft,
+                        y: point.series.yAxis.top - chart.plotTop
+                    };
+                }
+
+                return position;
+            }
+        },
+        series: [{
+            type: 'candlestick',
+            id: '{{ticker}}-ohlc',
+            name: '{{ticker}} Stock Price',
+            data: ohlc
+        }, {
+            type: 'column',
+            id: '{{ticker}}-volume',
+            name: '{{ticker}} Volume',
+            data: volume,
+            yAxis: 1
+        }],
+        responsive: {
+            rules: [{
+                condition: {
+                    maxWidth: 800
+                },
+                chartOptions: {
+                    rangeSelector: {
+                        inputEnabled: false
+                    }
+                }
+            }]
+        }
+    });
+});
+</script>
