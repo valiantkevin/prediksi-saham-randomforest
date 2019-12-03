@@ -140,6 +140,11 @@ def index(request):
                     value.loc[i,'After20']=int(1)
                 else:
                     value.loc[i,'After20']=int(0)
+            for i in range(-21,-1,1):
+                value.iloc[i,'After20']=int(9)
+            for i in range(-6,-1,1):
+                value.iloc[i,'After5']=int(9)
+            value.iloc[-2,'After1']=int(0)
             value.fillna(0,inplace=True)
             for index, row in value.iterrows():
                 dt = datetime.datetime.strptime(row['Date/Time'], '%m/%d/%Y')
@@ -381,6 +386,219 @@ def do_update(request):
     low = request.POST['low']
     close = request.POST['close']
     volume = request.POST['volume']
+    s = Stocks(ticker=ticker, date=date, open=open, high=high, low=low, close=close, volume=volume, after1=9, after5=9, after20=9, plain1=9, plain5=9, plain20=9, grouped1=9, grouped5=9, grouped20=9, onehot1=9, onehot5=9, onehot20=9)
+    s.save()
+    stocks =  Stocks.objects.filter(ticker=ticker).order_by('id')
+    date1 = stocks.reverse()[1].date
+    date5 = stocks.reverse()[5].date
+    date20 = stocks.reverse()[20].date
+    after1 = 1 if stocks.reverse()[0].close<int(close) else (-1 if stocks.reverse()[0].close>int(close) else 0)
+    after5 = 1 if stocks.reverse()[4].close<int(close) else (-1 if stocks.reverse()[0].close>int(close) else 0)
+    after20 = 1 if stocks.reverse()[19].close<int(close) else (-1 if stocks.reverse()[0].close>int(close) else 0)
+    s = Stocks.objects.get(ticker=ticker, date=date1)
+    s.after1 = after1
+    s.save()
+    s = Stocks.objects.get(ticker=ticker, date=date5)
+    s.after5 = after5
+    s.save()
+    s = Stocks.objects.get(ticker=ticker, date=date20)
+    s.after20 = after20
+    s.save()
+    plainstocks = PlainStocks.objects.filter(ticker=ticker).order_by('id')
+    obv=plainstocks.reverse()[0].obv
+    if (int(close)>plainstocks.reverse()[0].close):
+        obv=obv+int(volume)
+    elif (int(close)<plainstocks.reverse()[0].close):
+        obv=obv-int(volume)
+    plainstocks = pd.DataFrame(list(PlainStocks.objects.values_list('open', 'high', 'low', 'close', 'volume').filter(ticker=ticker).order_by('id')))
+    plainstocks.columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+    plainstocks = plainstocks.append({'Open':int(open),'High':int(high),'Low':int(low),'Close':int(close),'Volume':int(volume)}, ignore_index=True)
+    i = len(plainstocks)-1
+    plainstocks.loc[i,'OBV'] = obv
+    plainstocks['ADI'] = acc_dist_index(plainstocks['High'], plainstocks['Low'], plainstocks['Close'], plainstocks['Volume'])
+    plainstocks['EMA3'] = ema_indicator(plainstocks['ADI'], n=3)
+    plainstocks['EMA10'] = ema_indicator(plainstocks['ADI'], n=10)
+    plainstocks['CO'] = plainstocks['EMA3'] - plainstocks['EMA10']
+    plainstocks['MACD'] = macd(plainstocks['Close'])
+    plainstocks['Signal'] = ema_indicator(plainstocks['MACD'], n=9)
+    plainstocks['Histogram'] = plainstocks['MACD'] - plainstocks['Signal']
+    plainstocks['Bollinger_High'] = bollinger_hband(plainstocks['Close'])
+    plainstocks['Bollinger_Low'] = bollinger_lband(plainstocks['Close'])
+    del plainstocks['ADI']
+    del plainstocks['EMA3']
+    del plainstocks['EMA10']
+    filename = ticker + '1-plain.joblib'
+    model = load(filename)
+    prediction = model.predict(plainstocks.values[-1].reshape(1,-1))
+    s = Stocks.objects.get(ticker=ticker,date=date)
+    s.plain1 = prediction[0]
+    s.save()
+    filename = ticker + '5-plain.joblib'
+    model = load(filename)
+    prediction = model.predict(plainstocks.values[-1].reshape(1,-1))
+    s = Stocks.objects.get(ticker=ticker,date=date)
+    s.plain5 = prediction[0]
+    s.save()
+    filename = ticker + '20-plain.joblib'
+    model = load(filename)
+    prediction = model.predict(plainstocks.values[-1].reshape(1,-1))
+    s = Stocks.objects.get(ticker=ticker,date=date)
+    s.plain20 = prediction[0]
+    s.save()
+    s = PlainStocks(ticker=ticker, date=date, open=plainstocks.loc[i,'Open'], high=plainstocks.loc[i,'High'], low=plainstocks.loc[i,'Low'], close=plainstocks.loc[i,'Close'], volume=plainstocks.loc[i,'Volume'], obv=plainstocks.loc[i,'OBV'], co=plainstocks.loc[i,'CO'], macd=plainstocks.loc[i,'MACD'], signal=plainstocks.loc[i,'Signal'], histogram=plainstocks.loc[i,'Histogram'], bollinger_high=plainstocks.loc[i,'Bollinger_High'], bollinger_low=plainstocks.loc[i,'Bollinger_Low'])
+    s.save()
+    if plainstocks.loc[i-1, 'OBV']>plainstocks.loc[i, 'OBV']:
+        plainstocks.loc[i,'OBV_Comparison'] = -1
+    elif plainstocks.loc[i-1, 'OBV']==plainstocks.loc[i, 'OBV']:
+        plainstocks.loc[i,'OBV_Comparison'] = 0
+    else:
+        plainstocks.loc[i,'OBV_Comparison'] = 1
+    if plainstocks.loc[i, 'OBV']>0:
+        plainstocks.loc[i,'OBV_Position'] = 1
+    elif plainstocks.loc[i, 'OBV']==0:
+        plainstocks.loc[i,'OBV_Position'] = 0
+    else:
+        plainstocks.loc[i,'OBV_Position'] = -1
+    if plainstocks.loc[i, 'CO']>0:
+        plainstocks.loc[i,'CO_Position'] = 1
+    elif plainstocks.loc[i, 'CO']<0:
+        plainstocks.loc[i,'CO_Position'] = -1
+    else:
+        plainstocks.loc[i,'CO_Position'] = 0
+    if plainstocks.loc[i, 'CO']>plainstocks.loc[i-1, 'CO']:
+        plainstocks.loc[i,'CO_Comparison'] = 1
+    elif plainstocks.loc[i, 'CO']<plainstocks.loc[i-1, 'CO']:
+        plainstocks.loc[i,'CO_Comparison'] = -1
+    else:
+        plainstocks.loc[i,'CO_Comparison'] = 0
+    if plainstocks.loc[i, 'MACD']>0:
+        plainstocks.loc[i,'MACD_Position'] = 1
+    elif plainstocks.loc[i, 'MACD']<0:
+        plainstocks.loc[i,'MACD_Position'] = -1
+    else:
+        plainstocks.loc[i,'MACD_Position'] = 0
+    if plainstocks.loc[i, 'MACD']>plainstocks.loc[i-1, 'MACD']:
+        plainstocks.loc[i,'MACD_Comparison'] = 1
+    elif plainstocks.loc[i, 'MACD']<plainstocks.loc[i-1, 'MACD']:
+        plainstocks.loc[i,'MACD_Comparison'] = -1
+    else:
+        plainstocks.loc[i,'MACD_Comparison'] = 0
+    if plainstocks.loc[i, 'Signal']>0:
+        plainstocks.loc[i,'Signal_Position'] = 1
+    elif plainstocks.loc[i, 'Signal']<0:
+        plainstocks.loc[i,'Signal_Position'] = -1
+    else:
+        plainstocks.loc[i,'Signal_Position'] = 0
+    if plainstocks.loc[i, 'Signal']>plainstocks.loc[i-1, 'Signal']:
+        plainstocks.loc[i,'Signal_Comparison'] = 1
+    elif plainstocks.loc[i, 'Signal']<plainstocks.loc[i-1, 'Signal']:
+        plainstocks.loc[i,'Signal_Comparison'] = -1
+    else:
+        plainstocks.loc[i,'Signal_Comparison'] = 0
+    if plainstocks.loc[i, 'Histogram']>0:
+        plainstocks.loc[i,'Histogram_Position'] = 1
+    elif plainstocks.loc[i, 'Histogram']<0:
+        plainstocks.loc[i,'Histogram_Position'] = -1
+    else:
+        plainstocks.loc[i,'Histogram_Position'] = 0
+    if plainstocks.loc[i, 'Histogram']>plainstocks.loc[i-1, 'Histogram']:
+        plainstocks.loc[i,'Histogram_Comparison'] = 1
+    elif plainstocks.loc[i, 'Histogram']<plainstocks.loc[i-1, 'Histogram']:
+        plainstocks.loc[i,'Histogram_Comparison'] = -1
+    else:
+        plainstocks.loc[i,'Histogram_Comparison'] = 0
+    if plainstocks.loc[i, 'Bollinger_High']<plainstocks.loc[i, 'Close']:
+        plainstocks.loc[i,'BB_Condition'] = 1
+    elif plainstocks.loc[i, 'Bollinger_Low']>plainstocks.loc[i, 'Close']:
+        plainstocks.loc[i,'BB_Condition'] = -1
+    else:
+        plainstocks.loc[i,'BB_Condition'] = 0
+    del plainstocks['Open']
+    del plainstocks['High']
+    del plainstocks['Low']
+    del plainstocks['Close']
+    del plainstocks['Volume']
+    del plainstocks['OBV']
+    del plainstocks['CO']
+    del plainstocks['MACD']
+    del plainstocks['Signal']
+    del plainstocks['Histogram']
+    del plainstocks['Bollinger_High']
+    del plainstocks['Bollinger_Low']
+    filename = ticker + '1-grouped.joblib'
+    model = load(filename)
+    prediction = model.predict(plainstocks.values[-1].reshape(1,-1))
+    s = Stocks.objects.get(ticker=ticker,date=date)
+    s.grouped1 = prediction[0]
+    s.save()
+    filename = ticker + '5-grouped.joblib'
+    model = load(filename)
+    prediction = model.predict(plainstocks.values[-1].reshape(1,-1))
+    s = Stocks.objects.get(ticker=ticker,date=date)
+    s.grouped5 = prediction[0]
+    s.save()
+    filename = ticker + '20-grouped.joblib'
+    model = load(filename)
+    prediction = model.predict(plainstocks.values[-1].reshape(1,-1))
+    s = Stocks.objects.get(ticker=ticker,date=date)
+    s.grouped20 = prediction[0]
+    s.save()
+    s = GroupedStocks(ticker=ticker, date=date, obv_comparison=plainstocks.loc[i,'OBV_Comparison'], obv_position=plainstocks.loc[i,'OBV_Position'], co_comparison=plainstocks.loc[i,'CO_Comparison'], co_position=plainstocks.loc[i,'CO_Position'], macd_comparison=plainstocks.loc[i,'MACD_Comparison'], macd_position=plainstocks.loc[i,'MACD_Position'], signal_comparison=plainstocks.loc[i,'Signal_Comparison'], signal_position=plainstocks.loc[i,'Signal_Position'], histogram_comparison=plainstocks.loc[i,'Histogram_Comparison'], histogram_position=plainstocks.loc[i,'Histogram_Position'], bb_condition=plainstocks.loc[i,'BB_Condition'])
+    s.save()
+    OBV_Comparison_Naik = 1 if plainstocks.loc[i,'OBV_Comparison']==1 else 0
+    OBV_Comparison_Tetap = 1 if plainstocks.loc[i,'OBV_Comparison']==0 else 0
+    OBV_Comparison_Turun = 1 if plainstocks.loc[i,'OBV_Comparison']==-1 else 0
+    OBV_Position_Positif = 1 if plainstocks.loc[i,'OBV_Position']==1 else 0
+    OBV_Position_Negatif = 1 if plainstocks.loc[i,'OBV_Position']==-1 else 0
+    OBV_Position_Nol = 1 if plainstocks.loc[i,'OBV_Position']==0 else 0
+    CO_Position_Positif = 1 if plainstocks.loc[i,'CO_Position']==1 else 0
+    CO_Position_Negatif = 1 if plainstocks.loc[i,'CO_Position']==-1 else 0
+    CO_Position_Nol = 1 if plainstocks.loc[i,'CO_Position']==0 else 0
+    CO_Comparison_Naik = 1 if plainstocks.loc[i,'CO_Comparison']==1 else 0
+    CO_Comparison_Turun = 1 if plainstocks.loc[i,'CO_Comparison']==-1 else 0
+    CO_Comparison_Tetap = 1 if plainstocks.loc[i,'CO_Comparison']==0 else 0
+    MACD_Position_Positif = 1 if plainstocks.loc[i,'MACD_Position']==1 else 0
+    MACD_Position_Negatif = 1 if plainstocks.loc[i,'MACD_Position']==-1 else 0
+    MACD_Position_Nol = 1 if plainstocks.loc[i,'MACD_Position']==0 else 0
+    MACD_Comparison_Naik = 1 if plainstocks.loc[i,'MACD_Comparison']==1 else 0
+    MACD_Comparison_Turun = 1 if plainstocks.loc[i,'MACD_Comparison']==-1 else 0
+    MACD_Comparison_Tetap = 1 if plainstocks.loc[i,'MACD_Comparison']==0 else 0
+    Signal_Position_Positif = 1 if plainstocks.loc[i,'Signal_Position']==1 else 0
+    Signal_Position_Negatif = 1 if plainstocks.loc[i,'Signal_Position']==-1 else 0
+    Signal_Position_Nol = 1 if plainstocks.loc[i,'Signal_Position']==0 else 0
+    Signal_Comparison_Naik = 1 if plainstocks.loc[i,'Signal_Comparison']==1 else 0
+    Signal_Comparison_Turun = 1 if plainstocks.loc[i,'Signal_Comparison']==-1 else 0
+    Signal_Comparison_Tetap = 1 if plainstocks.loc[i,'Signal_Comparison']==0 else 0
+    Histogram_Position_Positif = 1 if plainstocks.loc[i,'Histogram_Position']==1 else 0
+    Histogram_Position_Negatif = 1 if plainstocks.loc[i,'Histogram_Position']==-1 else 0
+    Histogram_Position_Nol = 1 if plainstocks.loc[i,'Histogram_Position']==0 else 0
+    Histogram_Comparison_Naik = 1 if plainstocks.loc[i,'Histogram_Comparison']==1 else 0
+    Histogram_Comparison_Turun = 1 if plainstocks.loc[i,'Histogram_Comparison']==-1 else 0
+    Histogram_Comparison_Tetap = 1 if plainstocks.loc[i,'Histogram_Comparison']==0 else 0
+    BB_Condition_Overbought = 1 if plainstocks.loc[i,'BB_Condition']==1 else 0
+    BB_Condition_Oversold = 1 if plainstocks.loc[i,'BB_Condition']==-1 else 0
+    BB_Condition_Normal = 1 if plainstocks.loc[i,'BB_Condition']==0 else 0
+    data = [OBV_Comparison_Naik,OBV_Comparison_Tetap,OBV_Comparison_Turun,OBV_Position_Positif,OBV_Position_Negatif,OBV_Position_Nol,CO_Position_Positif,CO_Position_Negatif,CO_Position_Nol,CO_Comparison_Naik,CO_Comparison_Turun,CO_Comparison_Tetap,MACD_Position_Positif,MACD_Position_Negatif,MACD_Position_Nol,MACD_Comparison_Naik,MACD_Comparison_Turun,MACD_Comparison_Tetap,Signal_Position_Positif,Signal_Position_Negatif,Signal_Position_Nol,Signal_Comparison_Naik,Signal_Comparison_Turun,Signal_Comparison_Tetap,Histogram_Position_Positif,Histogram_Position_Negatif,Histogram_Position_Nol,Histogram_Comparison_Naik,Histogram_Comparison_Turun,Histogram_Comparison_Tetap,BB_Condition_Overbought,BB_Condition_Oversold,BB_Condition_Normal]
+    filename = ticker + '1-onehot.joblib'
+    model = load(filename)
+    prediction = model.predict(np.array(data).reshape(1,-1))
+    s = Stocks.objects.get(ticker=ticker,date=date)
+    s.onehot1 = prediction[0]
+    s.save()
+    filename = ticker + '5-onehot.joblib'
+    model = load(filename)
+    prediction = model.predict(np.array(data).reshape(1,-1))
+    s = Stocks.objects.get(ticker=ticker,date=date)
+    s.onehot5 = prediction[0]
+    s.save()
+    filename = ticker + '20-onehot.joblib'
+    model = load(filename)
+    prediction = model.predict(np.array(data).reshape(1,-1))
+    s = Stocks.objects.get(ticker=ticker,date=date)
+    s.onehot20 = prediction[0]
+    s.save()
+    s = OneHotStocks(ticker=ticker, date=date, obv_comparison_naik=OBV_Comparison_Naik, obv_comparison_tetap=OBV_Comparison_Tetap, obv_comparison_turun=OBV_Comparison_Turun, obv_position_positif=OBV_Position_Positif, obv_position_negatif=OBV_Position_Negatif, obv_position_nol=OBV_Position_Nol, co_comparison_naik=CO_Comparison_Naik, co_comparison_tetap=CO_Comparison_Tetap, co_comparison_turun=CO_Comparison_Turun, co_position_positif=CO_Position_Positif, co_position_negatif=CO_Position_Negatif, co_position_nol=CO_Position_Nol, macd_comparison_naik=MACD_Comparison_Naik, macd_comparison_tetap=MACD_Comparison_Tetap, macd_comparison_turun=MACD_Comparison_Turun, macd_position_positif=MACD_Position_Positif, macd_position_nol=MACD_Position_Nol, macd_position_negatif=MACD_Position_Negatif, signal_comparison_naik=Signal_Comparison_Naik, signal_comparison_tetap=Signal_Comparison_Tetap, signal_comparison_turun=Signal_Comparison_Turun, signal_position_positif=Signal_Position_Positif, signal_position_nol=Signal_Position_Nol, signal_position_negatif=Signal_Position_Negatif, histogram_comparison_naik=Histogram_Comparison_Naik, histogram_comparison_tetap=Histogram_Comparison_Tetap, histogram_comparison_turun=Histogram_Comparison_Turun, histogram_position_positif=Histogram_Position_Positif, histogram_position_nol=Histogram_Position_Nol, histogram_position_negatif=Histogram_Position_Negatif, bb_condition_overbought=BB_Condition_Overbought, bb_condition_oversold=BB_Condition_Oversold, bb_condition_normal=BB_Condition_Normal)
+    s.save()
     return redirect(update)
 
 def data_main(request):
@@ -496,9 +714,9 @@ def result(request, ticker, d):
         'date': date,
         'ticker' : ticker,
         'idx' : idx,
-        'after1' : ('Naik' if decision[0]['after1']==1 else ('Turun' if decision[0]['after1']==-1 else 'Tetap')),
-        'after5' : ('Naik' if decision[0]['after5']==1 else ('Turun' if decision[0]['after5']==-1 else 'Tetap')),
-        'after20' : ('Naik' if decision[0]['after20']==1 else ('Turun' if decision[0]['after20']==-1 else 'Tetap')),
+        'after1' : ('Naik' if decision[0]['after1']==1 else ('Turun' if decision[0]['after1']==-1 else ('Tetap' if decision[0]['after1']==0 else 'No Data'))),
+        'after5' : ('Naik' if decision[0]['after5']==1 else ('Turun' if decision[0]['after5']==-1 else ('Tetap' if decision[0]['after5']==0 else 'No Data'))),
+        'after20' : ('Naik' if decision[0]['after20']==1 else ('Turun' if decision[0]['after20']==-1 else ('Tetap' if decision[0]['after20']==0 else 'No Data'))),
         'predictionplain1' : ('Naik' if predictionplain1==1 else ('Turun' if predictionplain1==-1 else 'Tetap')),
         'confidenceplain1' : confidenceplain1,
         'predictionplain5' : ('Naik' if predictionplain5==1 else ('Turun' if predictionplain5==-1 else 'Tetap')),
